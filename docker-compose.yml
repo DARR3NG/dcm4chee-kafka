@@ -1,0 +1,128 @@
+services:
+  zookeeper:
+    image: zookeeper:latest
+    container_name: container_zookeeper
+    ports:
+      - "2181:2181"
+      - "2888:2888"
+      - "3888:3888"
+
+  kafka:
+    image: debezium/kafka:3.0.0.Final
+    container_name: container_broker
+    ports:
+      - "9092:9092"
+    environment:
+      - ZOOKEEPER_CONNECT=zookeeper:2181
+    depends_on:
+      - zookeeper
+
+  mysql:
+    image: mysql:latest
+    container_name: container_mysql
+    build: .
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_USER: debezium
+      MYSQL_PASSWORD: dbz
+      MYSQL_DATABASE: hospital
+
+  connect:
+    image: debezium/connect:3.0.0.Final
+    container_name: container_kafka_connect
+    ports:
+      - "8083:8083"
+    environment:
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: kafka_connect_configs
+      OFFSET_STORAGE_TOPIC: kafka_connect_offsets
+      STATUS_STORAGE_TOPIC: kafka_connect_statuses
+      BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+    depends_on:
+      - zookeeper
+      - kafka
+      - mysql
+
+  sync-service:
+    build: ./sync-service
+    container_name: container_consumer
+    depends_on:
+      - kafka
+      - connect
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_GROUP_ID: consumer-group
+      KAFKA_TOPIC: hospital.patients
+      DCM4CHEE_HOST: dcm4chee
+      DCM4CHEE_PORT: 8080
+      DCM4CHEE_USERNAME: admin
+      DCM4CHEE_PASSWORD: admin
+      KAFKA_BROKER=kafka: 9092
+    command: ["python", "consumer.py"]
+    restart: on-failure
+   
+
+  ldap:
+    image: dcm4che/slapd-dcm4chee:2.6.7-33.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+    ports:
+      - "389:389"
+    environment:
+      STORAGE_DIR: /storage/fs1
+    volumes:
+      - ./var/local/dcm4chee-arc/ldap:/var/lib/openldap/openldap-data
+      - ./var/local/dcm4chee-arc/slapd.d:/etc/openldap/slapd.d
+  db:
+    image: dcm4che/postgres-dcm4chee:16.4-33
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+    ports:
+     - "5432:5432"
+    environment:
+      POSTGRES_DB: pacsdb
+      POSTGRES_USER: pacs
+      POSTGRES_PASSWORD: pacs
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - ./var/local/dcm4chee-arc/db:/var/lib/postgresql/data
+  arc:
+    image: dcm4che/dcm4chee-arc-psql:5.33.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+      - "9990:9990"
+      - "9993:9993"
+      - "11112:11112"
+      - "2762:2762"
+      - "2575:2575"
+      - "12575:12575"
+    environment:
+      POSTGRES_DB: pacsdb
+      POSTGRES_USER: pacs
+      POSTGRES_PASSWORD: pacs
+      WILDFLY_CHOWN: /storage
+      WILDFLY_WAIT_FOR: ldap:389 db:5432
+    depends_on:
+      - ldap
+      - db  
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - ./var/local/dcm4chee-arc/wildfly:/opt/wildfly/standalone
+      - ./var/local/dcm4chee-arc/storage:/storage
