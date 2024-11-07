@@ -2,7 +2,7 @@
 
 1. Clone the repository:
    ```bash
-   git clone <repository_url>
+   git clone https://github.com/DARR3NG/dcm4chee-kafka.git
 
    cd dcm4chee-kafka
    
@@ -12,7 +12,8 @@
    ```bash
    docker exec -it container_mysql mysql -h localhost -u root -p hospital
   
-   Note: The root password is password.
+Note: The root password is password.
+
 
 2. Run the following SQL commands to set up the database:
       ```bash
