@@ -18,11 +18,8 @@ services:
       - zookeeper
 
   mysql:
-    image: mysql:latest
+    image: mysql
     container_name: container_mysql
-    build: .
-    ports:
-      - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_USER: debezium
@@ -50,7 +47,9 @@ services:
       - mysql
 
   sync-service:
-    build: ./sync-service
+    build:
+      context: ./bun-sync-service
+      network: host
     container_name: container_consumer
     depends_on:
       - kafka
@@ -64,9 +63,7 @@ services:
       DCM4CHEE_USERNAME: admin
       DCM4CHEE_PASSWORD: admin
       KAFKA_BROKER=kafka: 9092
-    command: ["python", "consumer.py"]
     restart: on-failure
-   
 
   ldap:
     image: dcm4che/slapd-dcm4chee:2.6.7-33.0
@@ -88,7 +85,7 @@ services:
       options:
         max-size: "10m"
     ports:
-     - "5432:5432"
+      - "5432:5432"
     environment:
       POSTGRES_DB: pacsdb
       POSTGRES_USER: pacs
@@ -120,7 +117,7 @@ services:
       WILDFLY_WAIT_FOR: ldap:389 db:5432
     depends_on:
       - ldap
-      - db  
+      - db
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
